@@ -2,19 +2,44 @@ name: Deploy Flask App
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - name: Deploy to EC2-1
+        env:
+          HOST: ${{ secrets.EC2_HOST_1 }}
+          KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          echo "$KEY" > key.pem
+          chmod 600 key.pem
+          ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@$HOST '
+            cd ~/devops-ha-project &&
+            git pull origin main &&
+            if [ -f ~/app.pid ]; then kill $(cat ~/app.pid) 2>/dev/null || true; fi
+            nohup ~/devops-ha-project/venv/bin/python ~/devops-ha-project/app.py > ~/app.log 2>&1 &
+            echo $! > ~/app.pid
+          '
+          rm -f key.pem
 
-      - name: Deploy to EC2
-        run: echo "Deployment triggered successfully"
+      - name: Deploy to EC2-2
+        env:
+          HOST: ${{ secrets.EC2_HOST_2 }}
+          KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          echo "$KEY" > key.pem
+          chmod 600 key.pem
+          ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@$HOST '
+            cd ~/devops-ha-project &&
+            git pull origin main &&
+            if [ -f ~/app.pid ]; then kill $(cat ~/app.pid) 2>/dev/null || true; fi
+            nohup ~/devops-ha-project/venv/bin/python ~/devops-ha-project/app.py > ~/app.log 2>&1 &
+            echo $! > ~/app.pid
+          '
+          rm -f key.pem
